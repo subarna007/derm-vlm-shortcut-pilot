@@ -41,6 +41,7 @@ class VLM:
         self.model = AutoModelForImageTextToText.from_pretrained(repo, **kw).eval()
         self.dtype = compute
         self.four_bit = four_bit
+        self.batch_size, self.gen_batch = (2, 2) if key == "medgemma" else (8, 8)
         tok = self.processor.tokenizer
         self.letter_ids = [self._ids(tok, ch) for ch in C.LETTERS]
         self.yes_ids = self._ids(tok, "yes") + self._ids(tok, "Yes")

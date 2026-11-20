@@ -78,7 +78,10 @@ def _write(f, rec):
     f.flush()
 
 
-def infer(model, work=C.WORK_DIR, limit=None, variants=C.VARIANTS, batch_size=10, gen_batch=8):
+def infer(model, work=C.WORK_DIR, limit=None, variants=C.VARIANTS, batch_size=None, gen_batch=None):
+    # MedGemma runs out of memory on a T4 with large batches, and batching does not make it faster
+    batch_size = batch_size or getattr(model, "batch_size", 4)
+    gen_batch = gen_batch or getattr(model, "gen_batch", 4)
     work = Path(work)
     df = pd.read_csv(work / "manifest.csv")
     only = os.environ.get("ONLY_DATASET")  # split one model's run across two notebooks
@@ -127,7 +130,10 @@ def infer(model, work=C.WORK_DIR, limit=None, variants=C.VARIANTS, batch_size=10
             if not names:
                 continue
             im = img("original", r.image_id)
-            ps = model.yes_prob_batch([im] * len(names), [P.criterion(n) for n in names])
+            ps = []
+            for i in range(0, len(names), batch_size):
+                part = names[i:i + batch_size]
+                ps += list(model.yes_prob_batch([im] * len(part), [P.criterion(n) for n in part]))
             for name, p in zip(names, ps):
                 _write(f, {"key": f"{r.image_id}|{name}", "image_id": r.image_id, "criterion": name,
                            "p_yes": round(float(p), 6)})
