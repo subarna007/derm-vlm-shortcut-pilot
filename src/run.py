@@ -9,6 +9,7 @@ already there, so a run that stops (Kaggle sessions end after 12 hours) can be r
 """
 import argparse
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -80,6 +81,9 @@ def _write(f, rec):
 def infer(model, work=C.WORK_DIR, limit=None, variants=C.VARIANTS, batch_size=10, gen_batch=8):
     work = Path(work)
     df = pd.read_csv(work / "manifest.csv")
+    only = os.environ.get("ONLY_DATASET")  # split one model's run across two notebooks
+    if only:
+        df = df[df.dataset == only]
     if limit:
         df = df.groupby("dataset").head(limit)
     out_dir = work / "raw" / model.key
