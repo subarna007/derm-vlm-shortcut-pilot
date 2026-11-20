@@ -100,3 +100,11 @@ src/analyze.py    the four tests, bootstrap intervals, report and figures
   not to rank models.
 - Answers are read from the first token. A model that would have written "The answer is B" is still
   scored on the letter it gives most probability to.
+
+## References
+
+- Kawahara, J., Daneshvar, S., Argenziano, G., & Hamarneh, G. (2019). Seven-point checklist and skin lesion
+  classification using multitask multimodal neural nets. *IEEE Journal of Biomedical and Health Informatics,
+  23*(2), 538–546. https://doi.org/10.1109/JBHI.2018.2824327
+- Pacheco, A. G. C., et al. (2020). PAD-UFES-20: A skin lesion dataset composed of patient data and clinical
+  images collected from smartphones. *Data in Brief, 32*, 106221. https://doi.org/10.1016/j.dib.2020.106221
