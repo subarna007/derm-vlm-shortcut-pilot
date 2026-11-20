@@ -98,3 +98,9 @@ def test_end_to_end(tmp_path, monkeypatch):
     assert (tmp_path / "results" / "results.md").read_text().startswith("# Pilot results")
     for f in ("reliability.png", "background_flips.png", "criteria_auroc.png", "variants.jpg"):
         assert (tmp_path / "results" / "figures" / f).exists()
+
+
+def test_pad_only(tmp_path):
+    d7, pad = make(tmp_path / "data")
+    man = data.build_manifest(tmp_path / "nope", pad)
+    assert set(man.dataset) == {"pad"}

@@ -111,7 +111,8 @@ def infer(model, work=C.WORK_DIR, limit=None, variants=C.VARIANTS):
     path = out_dir / "criteria.jsonl"
     done = _done(path)
     with path.open("a") as f:
-        for r in tqdm(list(df[df.dataset == "derm7pt"].itertuples()), desc=f"{model.key} criteria"):
+        for r in tqdm(list(df[df.dataset == "derm7pt"].itertuples()) if "dataset" in df else [],
+                      desc=f"{model.key} criteria"):
             im = None
             for name in C.CRITERIA:
                 key = f"{r.image_id}|{name}"

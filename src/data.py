@@ -130,9 +130,19 @@ def sample(df: pd.DataFrame, per_class, seed=C.SEED) -> pd.DataFrame:
 
 
 def build_manifest(derm7pt_dir=C.DERM7PT_DIR, pad_dir=C.PAD_DIR) -> pd.DataFrame:
-    d7 = sample(load_derm7pt(derm7pt_dir), C.DERM7PT_PER_CLASS)
-    pad = sample(load_pad(pad_dir), C.PAD_PER_CLASS)
-    return pd.concat([d7, pad], ignore_index=True)
+    """Either dataset may be missing (e.g. while waiting for Derm7pt access); the other is used alone."""
+    parts = []
+    if derm7pt_dir and Path(derm7pt_dir).exists():
+        parts.append(sample(load_derm7pt(derm7pt_dir), C.DERM7PT_PER_CLASS))
+    else:
+        print(f"Derm7pt not found at {derm7pt_dir}; continuing without it")
+    if pad_dir and Path(pad_dir).exists():
+        parts.append(sample(load_pad(pad_dir), C.PAD_PER_CLASS))
+    else:
+        print(f"PAD-UFES-20 not found at {pad_dir}; continuing without it")
+    if not parts:
+        raise FileNotFoundError("neither dataset was found")
+    return pd.concat(parts, ignore_index=True)
 
 
 def load_image(path, max_side=C.MAX_SIDE) -> np.ndarray:
