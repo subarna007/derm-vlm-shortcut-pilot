@@ -10,7 +10,7 @@ from . import prompts as P
 
 
 class VLM:
-    def __init__(self, key: str, four_bit: bool | None = None):
+    def __init__(self, key: str, four_bit: bool | None = None, half: bool = False):
         import torch
         from transformers import AutoModelForImageTextToText, AutoProcessor
 
@@ -20,9 +20,12 @@ class VLM:
         bf16 = torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 8
         # Gemma 3 models are unstable in float16, so without bfloat16 hardware (e.g. a T4)
         # MedGemma is loaded in 4 bits with float32 compute.
-        if four_bit is None:
+        if half:  # plain float16, no quantisation; checked for NaNs on every call
+            four_bit = False
+        elif four_bit is None:
             four_bit = key == "medgemma" and not bf16
-        compute = torch.bfloat16 if bf16 else (torch.float32 if key == "medgemma" else torch.float16)
+        compute = torch.bfloat16 if bf16 else (
+            torch.float16 if (half or key != "medgemma") else torch.float32)
         kw = {"device_map": "auto"}
         if four_bit:
             from transformers import BitsAndBytesConfig

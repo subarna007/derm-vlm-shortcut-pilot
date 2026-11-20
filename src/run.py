@@ -146,13 +146,14 @@ def main():
     ap.add_argument("step", choices=["prepare", "infer"])
     ap.add_argument("--model", choices=list(C.MODELS))
     ap.add_argument("--four-bit", action="store_true", help="force 4-bit loading")
+    ap.add_argument("--half", action="store_true", help="float16 without quantisation")
     ap.add_argument("--limit", type=int, default=None, help="images per dataset, for a quick test")
     a = ap.parse_args()
     if a.step == "prepare":
         prepare()
     else:
         from .models import VLM
-        infer(VLM(a.model, four_bit=True if a.four_bit else None), limit=a.limit)
+        infer(VLM(a.model, four_bit=True if a.four_bit else None, half=a.half), limit=a.limit)
 
 
 if __name__ == "__main__":
