@@ -54,14 +54,54 @@ class VLM:
             raise ValueError(f"no single-token encoding for {s!r}")
         return sorted(set(out))
 
-    def _inputs(self, image, text):
-        messages = [
+    @staticmethod
+    def _conv(image, text):
+        return [
             {"role": "system", "content": [{"type": "text", "text": P.SYSTEM}]},
             {"role": "user", "content": [{"type": "image", "image": image}, {"type": "text", "text": text}]},
         ]
+
+    def _inputs(self, image, text):
         inp = self.processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt")
+            self._conv(image, text), add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt")
         return inp.to(self.model.device, dtype=self.dtype)
+
+    def _batch_inputs(self, images, texts):
+        """Left-padded batch, so the last position is the next token for every row."""
+        self.processor.tokenizer.padding_side = "left"
+        convs = [self._conv(im, t) for im, t in zip(images, texts)]
+        inp = self.processor.apply_chat_template(
+            convs, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt",
+            padding=True)
+        return inp.to(self.model.device, dtype=self.dtype)
+
+    def _batch_logits(self, images, texts):
+        torch = self.torch
+        with torch.inference_mode():
+            out = self.model(**self._batch_inputs(images, texts))
+        z = out.logits[:, -1].float()
+        if not torch.isfinite(z).all():
+            raise RuntimeError("non-finite logits; try four_bit=True or a GPU with bfloat16")
+        return z
+
+    def option_probs_batch(self, images, texts):
+        z = self._batch_logits(images, texts)
+        s = self.torch.stack([self.torch.logsumexp(z[:, ids], 1) for ids in self.letter_ids], 1)
+        return self.torch.softmax(s, 1).cpu().numpy()
+
+    def yes_prob_batch(self, images, texts):
+        z = self._batch_logits(images, texts)
+        y = self.torch.logsumexp(z[:, self.yes_ids], 1)
+        n = self.torch.logsumexp(z[:, self.no_ids], 1)
+        return self.torch.sigmoid(y - n).cpu().numpy().tolist()
+
+    def generate_batch(self, images, texts, max_new_tokens=160):
+        torch = self.torch
+        inp = self._batch_inputs(images, texts)
+        with torch.inference_mode():
+            out = self.model.generate(**inp, max_new_tokens=max_new_tokens, do_sample=False)
+        new = out[:, inp["input_ids"].shape[1]:]
+        return [t.strip() for t in self.processor.batch_decode(new, skip_special_tokens=True)]
 
     def _next_logits(self, image, text):
         torch = self.torch
@@ -98,6 +138,15 @@ class FakeVLM:
 
     def __init__(self, key="fake"):
         self.key = key
+
+    def option_probs_batch(self, images, texts):
+        return np.stack([self.option_probs(i, t) for i, t in zip(images, texts)])
+
+    def yes_prob_batch(self, images, texts):
+        return [self.yes_prob(i, t) for i, t in zip(images, texts)]
+
+    def generate_batch(self, images, texts, max_new_tokens=160):
+        return [self.generate(i, t) for i, t in zip(images, texts)]
 
     def _rng(self, image, text):
         import zlib

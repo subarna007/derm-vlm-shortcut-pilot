@@ -77,7 +77,7 @@ def _write(f, rec):
     f.flush()
 
 
-def infer(model, work=C.WORK_DIR, limit=None, variants=C.VARIANTS):
+def infer(model, work=C.WORK_DIR, limit=None, variants=C.VARIANTS, batch_size=10, gen_batch=8):
     work = Path(work)
     df = pd.read_csv(work / "manifest.csv")
     if limit:
@@ -89,48 +89,56 @@ def infer(model, work=C.WORK_DIR, limit=None, variants=C.VARIANTS):
         p = work / "images" / v / f"{iid}.png"
         return Image.open(p).convert("RGB") if p.exists() else None
 
-    # 1. multiple-choice diagnosis, every variant, both option orders
+    # 1. multiple-choice diagnosis: every variant and both option orders of one image in one batch
     path = out_dir / "mcq.jsonl"
     done = _done(path)
     with path.open("a") as f:
         for r in tqdm(list(df.itertuples()), desc=f"{model.key} diagnosis"):
+            jobs = []
             for v in variants:
                 im = None
                 for order in ("forward", "reversed"):
                     key = f"{r.image_id}|{v}|{order}"
                     if key in done:
                         continue
-                    im = im or img(v, r.image_id)
+                    if im is None:
+                        im = img(v, r.image_id)
                     if im is None:
                         break
-                    p = model.option_probs(im, P.mcq(r.modality, order))
+                    jobs.append((key, v, order, im))
+            for i in range(0, len(jobs), batch_size):
+                part = jobs[i:i + batch_size]
+                probs = model.option_probs_batch([j[3] for j in part], [P.mcq(r.modality, j[2]) for j in part])
+                for (key, v, order, _), p in zip(part, probs):
                     _write(f, {"key": key, "image_id": r.image_id, "variant": v, "order": order,
                                "probs": [round(float(x), 6) for x in p]})
 
     # 2. checklist criteria, Derm7pt originals only (they have expert labels)
     path = out_dir / "criteria.jsonl"
     done = _done(path)
+    rows = list(df[df.dataset == "derm7pt"].itertuples()) if "dataset" in df else []
     with path.open("a") as f:
-        for r in tqdm(list(df[df.dataset == "derm7pt"].itertuples()) if "dataset" in df else [],
-                      desc=f"{model.key} criteria"):
-            im = None
-            for name in C.CRITERIA:
-                key = f"{r.image_id}|{name}"
-                if key in done:
-                    continue
-                im = im or img("original", r.image_id)
-                _write(f, {"key": key, "image_id": r.image_id, "criterion": name,
-                           "p_yes": round(model.yes_prob(im, P.criterion(name)), 6)})
+        for r in tqdm(rows, desc=f"{model.key} criteria"):
+            names = [n for n in C.CRITERIA if f"{r.image_id}|{n}" not in done]
+            if not names:
+                continue
+            im = img("original", r.image_id)
+            ps = model.yes_prob_batch([im] * len(names), [P.criterion(n) for n in names])
+            for name, p in zip(names, ps):
+                _write(f, {"key": f"{r.image_id}|{name}", "image_id": r.image_id, "criterion": name,
+                           "p_yes": round(float(p), 6)})
 
     # 3. free-text description with stated features and confidence, originals only
     path = out_dir / "describe.jsonl"
     done = _done(path)
+    todo = [r for r in df.itertuples() if r.image_id not in done]
     with path.open("a") as f:
-        for r in tqdm(list(df.itertuples()), desc=f"{model.key} describe"):
-            if r.image_id in done:
-                continue
-            text = model.generate(img("original", r.image_id), P.describe(r.modality))
-            _write(f, {"key": r.image_id, "image_id": r.image_id, "text": text, **P.parse_describe(text)})
+        for i in tqdm(range(0, len(todo), gen_batch), desc=f"{model.key} describe"):
+            part = todo[i:i + gen_batch]
+            texts = model.generate_batch([img("original", r.image_id) for r in part],
+                                         [P.describe(r.modality) for r in part])
+            for r, text in zip(part, texts):
+                _write(f, {"key": r.image_id, "image_id": r.image_id, "text": text, **P.parse_describe(text)})
 
 
 def main():
