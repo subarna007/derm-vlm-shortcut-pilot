@@ -290,7 +290,7 @@ def report(all_res) -> str:
             L.append("")
 
         L += ["### (d) Calibration (original images)", "",
-              "| Dataset | Accuracy | Mean token confidence | Token ECE | Verbal ECE (parsed answers) |",
+              "| Dataset | Accuracy | Mean token confidence | Token ECE | Verbal ECE (answers that named a diagnosis) |",
               "|---|---|---|---|---|"]
         for ds, x in r["calibration"].items():
             ve = x.get("verbal_ece")

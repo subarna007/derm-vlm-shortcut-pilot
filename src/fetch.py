@@ -45,3 +45,18 @@ def derm7pt(dest="/kaggle/working/data/derm7pt"):
     os.environ["DERM7PT_DIR"] = str(root)
     print("Derm7pt ready at", root)
     return root
+
+
+def setup_derm7pt(work="/kaggle/working/work"):
+    """Download Derm7pt if the secrets are set. If an earlier prepare step ran without it,
+    remove that sample so the next prepare includes Derm7pt. Model answers already saved are kept."""
+    import shutil
+    import pandas as pd
+    root = derm7pt()
+    man = Path(work) / "manifest.csv"
+    if root and man.exists() and "derm7pt" not in set(pd.read_csv(man).dataset):
+        man.unlink()
+        for d in ("images", "masks"):
+            shutil.rmtree(Path(work) / d, ignore_errors=True)
+        print("earlier sample had no Derm7pt; it will be rebuilt")
+    return root
