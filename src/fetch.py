@@ -23,16 +23,30 @@ def derm7pt(dest="/kaggle/working/data/derm7pt"):
             print("Derm7pt secrets not set; running without Derm7pt")
             return None
         import requests
+        from requests.auth import HTTPBasicAuth, HTTPDigestAuth
+        user, pw = user.strip(), pw.strip()
         dest.mkdir(parents=True, exist_ok=True)
         zpath = dest / "release_v0.zip"
-        with requests.get(URL, auth=(user, pw), stream=True, timeout=60) as r:
-            if r.status_code == 401:
-                print("Derm7pt login was refused; check DERM7PT_USER and DERM7PT_PASS")
-                return None
-            r.raise_for_status()
-            with open(zpath, "wb") as f:
-                for chunk in r.iter_content(1 << 20):
-                    f.write(chunk)
+        ok = False
+        for url in (URL.replace("http://", "https://"), URL):
+            for auth in (HTTPBasicAuth(user, pw), HTTPDigestAuth(user, pw)):
+                with requests.get(url, auth=auth, stream=True, timeout=60) as r:
+                    if r.status_code == 401:
+                        print(f"{url} {type(auth).__name__}: refused "
+                              f"(server asks for: {r.headers.get('WWW-Authenticate', '?').split(' ')[0]})")
+                        continue
+                    r.raise_for_status()
+                    with open(zpath, "wb") as f:
+                        for chunk in r.iter_content(1 << 20):
+                            f.write(chunk)
+                    ok = True
+                    break
+            if ok:
+                break
+        if not ok:
+            print("Derm7pt login was refused; check DERM7PT_USER and DERM7PT_PASS "
+                  f"(username has {len(user)} characters, password has {len(pw)})")
+            return None
         with zipfile.ZipFile(zpath) as z:
             z.extractall(dest)
         zpath.unlink()
