@@ -23,17 +23,20 @@ def _seed(image_id: str) -> int:
 
 def remove_lesion(rgb, keep):
     h, w = keep.shape
-    radius = max(5, int(0.02 * max(h, w)))
-    bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
-    out = cv2.inpaint(bgr, keep.astype(np.uint8) * 255, radius, cv2.INPAINT_TELEA)
-    out = cv2.cvtColor(out, cv2.COLOR_BGR2RGB)
-    # inpainting a large area leaves a flat patch; add skin-like grain from the background
+    # inpaint at reduced size (Telea is slow on large areas), then paste back only the lesion area
+    f = min(1.0, 256 / max(h, w))
+    small = cv2.resize(rgb, (max(1, round(w * f)), max(1, round(h * f))), interpolation=cv2.INTER_AREA)
+    ks = cv2.resize(keep.astype(np.uint8), small.shape[1::-1], interpolation=cv2.INTER_NEAREST)
+    ks = cv2.dilate(ks, np.ones((3, 3), np.uint8))
+    radius = max(3, int(0.02 * max(small.shape[:2])))
+    fill = cv2.inpaint(cv2.cvtColor(small, cv2.COLOR_RGB2BGR), ks * 255, radius, cv2.INPAINT_TELEA)
+    fill = cv2.resize(cv2.cvtColor(fill, cv2.COLOR_BGR2RGB), (w, h), interpolation=cv2.INTER_CUBIC)
+    # the upscaled fill is smooth; add skin-like grain from the background
     rng = np.random.default_rng(_seed("noise"))
     bg = rgb[~keep]
     sd = bg.std(axis=0) * 0.35 if bg.size else np.zeros(3)
-    noise = rng.normal(0, 1, out.shape) * sd
-    out = np.where(keep[..., None], np.clip(out + noise, 0, 255), out).astype(np.uint8)
-    return out
+    fill = np.clip(fill + rng.normal(0, 1, fill.shape) * sd, 0, 255)
+    return np.where(keep[..., None], fill, rgb).astype(np.uint8)
 
 
 def darker_skin(rgb, keep):
