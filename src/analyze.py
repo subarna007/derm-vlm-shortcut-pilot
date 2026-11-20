@@ -404,6 +404,7 @@ def main(work=C.WORK_DIR, results=C.RESULTS_DIR):
     results.mkdir(parents=True, exist_ok=True)
     (results / "metrics.json").write_text(json.dumps(all_res, indent=1, default=float))
     (results / "results.md").write_text(report(all_res))
+    (results / "tables.tex").write_text(latex_tables(all_res))
     figures(all_res, results / "figures")
     example_grid(work, results / "figures")
     summary = man.groupby(["dataset", "label"]).agg(n=("image_id", "size"), mask_ok=("mask_ok", "sum"))
@@ -414,3 +415,87 @@ def main(work=C.WORK_DIR, results=C.RESULTS_DIR):
 
 if __name__ == "__main__":
     main()
+
+
+# ---------- LaTeX tables for the paper ----------
+
+def _tci(x, pct=True):
+    if not isinstance(x, dict) or not np.isfinite(x.get("est", np.nan)):
+        return "--"
+    f = (lambda v: f"{100 * v:.1f}") if pct else (lambda v: f"{v:.2f}")
+    return f"{f(x['est'])} ({f(x['lo'])}--{f(x['hi'])})"
+
+
+def latex_tables(all_res) -> str:
+    """Tables for paper/paper.tex, written to results/tables.tex. One column per model."""
+    keys = list(all_res)
+    names = [all_res[k]["model"].split("/")[-1].replace("_", r"\_") for k in keys]
+    head = " & ".join(names)
+    cols = "l" + "c" * len(keys)
+    out = []
+
+    def table(label, caption, rows):
+        body = "\n".join(" & ".join(r) + r" \\" for r in rows)
+        out.append(rf"""\begin{{table}}[H]\centering\small
+\caption{{{caption}}}\label{{{label}}}
+\begin{{tabular}}{{{cols}}}\toprule
+ & {head} \\\midrule
+{body}
+\bottomrule\end{{tabular}}\end{{table}}""")
+
+    dss = sorted({ds for r in all_res.values() for ds in r["baseline"]})
+    rows = []
+    for ds in dss:
+        n = next((all_res[k]["baseline"][ds]["n"] for k in keys if ds in all_res[k]["baseline"]), 0)
+        rows.append([f"\\textit{{{ds}}} ($n={n}$)"] + [""] * len(keys))
+        rows.append(["\\quad Accuracy"] + [_tci(all_res[k]["baseline"].get(ds, {}).get("accuracy")) for k in keys])
+        rows.append(["\\quad Balanced accuracy"] + [_tci(all_res[k]["baseline"].get(ds, {}).get("balanced_accuracy")) for k in keys])
+        rows.append(["\\quad Answered ``cannot be determined''"] +
+                    [f"{100 * all_res[k]['baseline'][ds]['abstain_rate']:.1f}" if ds in all_res[k]["baseline"] else "--" for k in keys])
+    table("tab:baseline", f"Diagnosis on the original images, forced choice among {K} diagnoses (\\%, 95\\% bootstrap interval). "
+          f"Chance balanced accuracy is {100 / K:.1f}\\%.", rows)
+
+    a = [all_res[k]["lesion_removed"] for k in keys]
+    rows = [
+        ["Images"] + [str(x.get("n", 0)) for x in a],
+        ["``Cannot be determined'', original"] + [_tci(x.get("abstain_original")) for x in a],
+        ["``Cannot be determined'', lesion removed"] + [_tci(x.get("abstain_removed")) for x in a],
+        ["Confident diagnosis with lesion removed"] + [_tci(x.get("confident_removed")) for x in a],
+        ["Same diagnosis as on the original"] + [_tci(x.get("same_diagnosis")) for x in a],
+        ["Accuracy, original $\\rightarrow$ lesion removed"] +
+        [f"{100 * x['accuracy_original']:.1f} $\\rightarrow$ {100 * x['accuracy_removed']:.1f}" if x.get("n") else "--" for x in a],
+    ]
+    table("tab:removed", "Test (a): the lesion is painted over with surrounding skin (\\%). A confident diagnosis means "
+          "not answering ``cannot be determined'' and giving the top diagnosis at least 50\\% probability.", rows)
+
+    rows = []
+    for v, lab in (("bg_tone", "Darker skin"), ("bg_marker", "Skin marker"), ("bg_ruler", "Ruler")):
+        b = [all_res[k]["background"].get(v, {}) for k in keys]
+        rows.append([f"\\textit{{{lab}}}"] + [""] * len(keys))
+        rows.append(["\\quad Diagnosis changed"] + [_tci(x.get("flip_rate")) for x in b])
+        rows.append(["\\quad Change in P(melanoma), points"] +
+                    [(lambda d: f"{100 * d['est']:+.1f} ({100 * d['lo']:+.1f} to {100 * d['hi']:+.1f})")(x["delta_p_melanoma"])
+                     if x else "--" for x in b])
+    table("tab:background", "Test (b): only the skin around the lesion is changed; lesion pixels are identical (\\%, 95\\% bootstrap interval).", rows)
+
+    if any(all_res[k]["criteria"] for k in keys):
+        rows = []
+        for c in C.CRITERIA:
+            prev = next((all_res[k]["criteria"][c]["prevalence"] for k in keys if c in all_res[k]["criteria"]), np.nan)
+            rows.append([f"{c.replace('_', ' ')} ({100 * prev:.0f}\\%)"] +
+                        [_tci(all_res[k]["criteria"].get(c, {}).get("auroc"), pct=False) for k in keys])
+        table("tab:criteria", "Test (c): AUROC of the model's yes-probability for each 7-point checklist criterion against the "
+              "Derm7pt expert label (95\\% bootstrap interval; 0.5 is chance). Prevalence in brackets.", rows)
+
+    rows = []
+    for ds in dss:
+        d = [all_res[k]["calibration"].get(ds, {}) for k in keys]
+        rows.append([f"\\textit{{{ds}}}"] + [""] * len(keys))
+        rows.append(["\\quad Accuracy / mean token confidence"] +
+                    [f"{100 * x['accuracy']:.1f} / {100 * x['token_mean_conf']:.1f}" if x else "--" for x in d])
+        rows.append(["\\quad Token ECE"] + [_tci(x.get("token_ece"), pct=False) for x in d])
+        rows.append(["\\quad Verbal ECE (answers naming a diagnosis)"] +
+                    [f"{_tci(x['verbal_ece'], pct=False)} ({x['verbal_n_parsed']}/{x['verbal_n_total']})"
+                     if x.get("verbal_ece") else "--" for x in d])
+    table("tab:calibration", "Test (d): calibration on the original images (expected calibration error, 10 bins).", rows)
+    return "\n\n".join(out) + "\n"

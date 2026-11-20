@@ -6,3 +6,11 @@ work/
 results/raw/
 *.pt
 *.safetensors
+
+# LaTeX build files
+paper/*.aux
+paper/*.log
+paper/*.out
+paper/*.fls
+paper/*.fdb_latexmk
+paper/paper.pdf

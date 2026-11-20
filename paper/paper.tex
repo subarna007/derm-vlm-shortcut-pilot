@@ -1,0 +1,154 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[a4paper,margin=2.4cm]{geometry}
+\usepackage{microtype}
+\usepackage{setspace}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{booktabs,tabularx}
+\usepackage[table]{xcolor}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\usepackage[hidelinks]{hyperref}
+
+\graphicspath{{../results/figures/}}
+\setstretch{1.15}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.55em}
+\captionsetup{font=small,labelfont=bf,labelsep=period}
+\setlist{itemsep=0.15em,topsep=0.3em}
+\titleformat{\section}{\normalfont\large\bfseries}{\thesection}{0.8em}{}
+\titleformat{\subsection}{\normalfont\normalsize\bfseries}{\thesubsection}{0.8em}{}
+\titlespacing*{\section}{0pt}{1.3em}{0.5em}
+\titlespacing*{\subsection}{0pt}{0.9em}{0.3em}
+\definecolor{boxfill}{HTML}{EEF4F6}
+\definecolor{edge}{HTML}{1F6F8B}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\itshape Dahal --- Do dermatology VLMs look at the lesion?}
+\fancyhead[R]{\small\itshape Preprint, not peer reviewed}
+\fancyfoot[C]{\small \thepage\ of \pageref{LastPage}}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% set to 1 once the runs are complete and the results section is written
+\newif\ifresults
+\resultsfalse
+
+\begin{document}
+
+\begin{center}
+{\LARGE\bfseries Do vision-language models look at the lesion? A counterfactual pilot study of two open models on dermoscopic and smartphone skin images\par}
+\vspace{1.0em}
+{\large Subarna Dahal\par}
+\vspace{0.3em}
+{\small Lalitpur, Nepal\quad$\cdot$\quad \href{mailto:dahalsubarna9@gmail.com}{dahalsubarna9@gmail.com}\par}
+{\small Code and results: \url{https://github.com/subarna007/derm-vlm-shortcut-pilot}\par}
+\vspace{0.3em}
+{\small Draft of 20 November 2026\ifresults\else{} --- results not yet included\fi\par}
+\end{center}
+\vspace{0.4em}
+\noindent\rule{\textwidth}{0.4pt}
+
+{\small
+\textbf{Abstract}
+
+\textbf{Background.} Vision-language models (VLMs) now give fluent descriptions and diagnoses for photographs of skin lesions, and medical VLMs are released openly. A fluent answer does not show that it was based on the lesion. Convolutional classifiers for skin cancer are known to use shortcuts such as surgical ink and rulers; whether VLMs do the same has been studied much less, and confident answers that ignore the image would be dangerous in places where a dermatologist is hard to reach.
+
+\textbf{Methods.} Two open models, the medical VLM MedGemma 1.5 4B and the general VLM Qwen2.5-VL 3B, were tested zero-shot on 256 dermoscopic images from Derm7pt and 205 smartphone photos from PAD-UFES-20. Each image was posed as a multiple-choice question with eight diagnoses and the option ``cannot be determined'', and answer probabilities were read from the model's first output token, averaged over two option orders. Four tests were run: (a) the lesion was painted over with surrounding skin; (b) only the skin around the lesion was changed (darker skin tone, surgical-marker ink, or a ruler) while the lesion pixels stayed identical; (c) each model was asked about the seven criteria of the dermoscopic 7-point checklist and its answers were compared with the Derm7pt expert labels; (d) calibration of the token probabilities and of the confidence stated in words was measured with the expected calibration error.
+
+\ifresults
+\textbf{Results.} \input{abstract_results.tex}
+\else
+\textbf{Results.} The runs are in progress; results will be added when they are complete.
+\fi
+
+\textbf{Keywords:} vision-language models; dermatology; shortcut learning; counterfactual evaluation; calibration; MedGemma; Derm7pt; PAD-UFES-20\par
+}
+\noindent\rule{\textwidth}{0.4pt}
+
+\section{Introduction}
+
+Skin disease is common, and in much of the world a dermatologist is far away. In rural Nepal, for example, a person with a changing mole may have to travel to a city to have it looked at, and many do not. Image-based tools that could help a health worker decide which lesions need referral are therefore attractive, and the last two years have brought a new kind of candidate: vision-language models that take a photograph and answer in text. Some are built for medicine and released openly, such as MedGemma \cite{medgemma2025}; general models such as Qwen2.5-VL \cite{qwen25vl2025} also answer medical questions when asked.
+
+These models write fluently, and that is part of the risk. Earlier work on convolutional classifiers showed that high accuracy in skin cancer detection can rest partly on things that are not the lesion. Purple surgical-marker ink around a lesion made a commercial melanoma classifier more likely to call it melanoma \cite{winkler2019}, rulers in the image changed its output \cite{winkler2021}, and classifiers trained on images with the lesion removed still did far better than chance \cite{bissoto2019}. These are examples of shortcut learning \cite{geirhos2020}: a model uses a feature that is correlated with the label in the training data but is not the reason for the diagnosis. Performance also drops on skin tones that are rare in the training data \cite{daneshjou2022}.
+
+For VLMs there is less evidence. They are trained on very large and mostly unknown image--text collections, so the same shortcuts could have been learned, and their answers come with fluent explanations that can make a wrong answer sound reasonable. Three questions follow from this, and a fourth is about confidence:
+\begin{enumerate}[label=\textbf{Q\arabic*.}]
+  \item Does a model still give a confident diagnosis when there is no lesion in the image?
+  \item Does the diagnosis change when only the skin around the lesion changes?
+  \item Do the visual features a model says it sees match what dermatologists annotated?
+  \item Does a model's confidence match how often it is right?
+\end{enumerate}
+
+This is a pilot: the sample is small, two models are tested, and none is fine-tuned. The aim is to find out whether these problems are present and large enough to justify a full study, and to build a pipeline that can be reused for that study. All code, prompts and per-image answers are public.
+
+\section{Data}
+
+\textbf{Derm7pt} \cite{kawahara2019} contains dermoscopic and clinical images of 1,011 lesions with a diagnosis and expert labels for the seven criteria of the 7-point checklist \cite{argenziano1998}. Its diagnoses were mapped to six of the eight answer options (melanoma, including melanoma metastasis; nevus, including all nevus subtypes; basal cell carcinoma; seborrheic keratosis; dermatofibroma; vascular lesion); lentigo, melanosis and miscellaneous lesions were left out. All basal cell carcinomas, seborrheic keratoses, dermatofibromas and vascular lesions were used, and 60 melanomas and 60 nevi were sampled at random, giving 256 dermoscopic images.
+
+\textbf{PAD-UFES-20} \cite{pacheco2020} contains 2,298 smartphone photographs of 1,641 lesions from a public health programme in Brazil, with six diagnoses: actinic keratosis, basal cell carcinoma, squamous cell carcinoma (including Bowen's disease), seborrheic keratosis, melanoma and nevus. One image per lesion was taken, and 35 lesions per diagnosis were sampled at random (all 30 melanomas that remained after this step were used), giving 205 photographs.
+
+Images were downscaled so that their longest side was at most 896 pixels. Derm7pt is distributed under CC BY-NC-ND 4.0 and PAD-UFES-20 under CC BY 4.0; no Derm7pt images are reproduced in this paper.
+
+\section{Methods}
+
+\subsection{Models and questions}
+
+MedGemma 1.5 4B (\texttt{google/medgemma-1.5-4b-it}) was loaded in 4-bit NF4 quantisation with 32-bit computation, because Gemma~3 models are unstable in 16-bit floating point and the T4 GPUs used do not support bfloat16. Qwen2.5-VL 3B Instruct was loaded in float16 with images resized to at most about 500,000 pixels. Both were run with the Hugging Face \texttt{transformers} library on free Kaggle GPUs, with the same system prompt (``You are an experienced dermatologist.'') and no fine-tuning.
+
+For diagnosis, each image was shown with a multiple-choice question listing the eight diagnoses and a ninth option, ``Cannot be determined from this image'', and the instruction to answer with one letter. Rather than sampling an answer, the probability of each option was read from the logits of the first generated token, restricted to the nine letters. Every question was asked twice, with the eight diagnoses in forward and in reversed order, and the two probability vectors were averaged after mapping letters back to diagnoses; this removes the preference that small models often have for particular letters. The \emph{forced-choice} diagnosis is the most probable of the eight diagnoses, and its probability after renormalising over the eight is the model's \emph{token confidence}. The model \emph{abstains} when ``cannot be determined'' is the most probable of all nine options.
+
+\subsection{Image edits}
+
+Neither dataset has lesion outlines, so a rough mask was made automatically: Otsu thresholding on whichever of two channels (darkness or redness in CIELAB space) separated the image better, keeping the region nearest the centre and filling holes. Masks covering less than 2\% or more than 75\% of the image, or most of its border, were rejected, and all masks were checked by eye on contact sheets. To protect the lesion against an imperfect mask, the mask was enlarged by 12 pixels.
+
+For test (a) the enlarged mask was inpainted from the surrounding skin (Telea's method at reduced resolution, with added skin-like noise). For test (b) three edits changed only pixels outside the enlarged mask: the skin was made darker and browner, faded in over a band to avoid a hard edge; dashed purple surgical-marker lines were drawn around the lesion, as when a lesion is marked for excision; or a ruler with millimetre ticks was drawn along the bottom edge. For every test (b) image the code checks that the pixels inside the enlarged mask are identical to the original.
+
+\subsection{Stated features}
+
+For test (c), each Derm7pt image was shown with seven yes/no questions, one per criterion of the 7-point checklist: atypical pigment network, blue-whitish veil, atypical vascular pattern (dotted or linear irregular vessels), irregular streaks, irregular pigmentation, irregular dots or globules, and regression structures. The probability of ``yes'' was read from the first-token logits and compared with the expert label using the area under the ROC curve. Vascular patterns were grouped as in Kawahara et al.\ \cite{kawahara2019}. Each model also wrote a free-text description of every original image, in a fixed format with the features it used, a diagnosis and a confidence from 0 to 100.
+
+\subsection{Calibration and statistics}
+
+For test (d), the expected calibration error (ECE) was computed with ten equal-width bins \cite{guo2017}, once for the token confidence and once for the confidence the model stated in its free-text answer (using only answers that named a diagnosis). All results are reported with 95\% percentile bootstrap intervals over images (2,000 resamples). Paired comparisons (original against edited image) resample images, keeping both versions of an image together.
+
+\ifresults
+\section{Results}
+\input{results_text.tex}
+
+\section{Discussion}
+\input{discussion_text.tex}
+\fi
+
+\section{Limitations}
+
+The sample is small, so the intervals are wide; the study can show whether an effect is large, not rank models precisely. Only two small open models were tested, zero-shot and with one prompt, so the results do not describe larger or fine-tuned models. The lesion masks come from thresholding, not from experts, and the 12-pixel margin means that the darker-skin edit leaves a band of original skin around the lesion. Inpainting removes the lesion but leaves a smooth patch that is not quite like skin, so some ``cannot be determined'' answers in test (a) may be a reaction to the patch rather than to the missing lesion. The skin-tone edit changes colour only, which is a crude stand-in for darker skin. Reading answers from the first token assumes the model would answer with a letter; a model that would have started with ``The answer is'' is still scored on the letter it gives most probability to. Finally, Derm7pt and PAD-UFES-20 come from Europe and Brazil; neither represents patients in Nepal.
+
+\section*{Code and data availability}
+
+Code, prompts, per-image model answers and the analysis are at\\\url{https://github.com/subarna007/derm-vlm-shortcut-pilot}. Derm7pt is available after registration from Simon Fraser University and PAD-UFES-20 from Mendeley Data.
+
+\begin{thebibliography}{99}\small
+\bibitem{medgemma2025} Sellergren A, et al. MedGemma technical report. arXiv:2507.05201; 2025.
+\bibitem{qwen25vl2025} Bai S, Chen K, Liu X, et al. Qwen2.5-VL technical report. arXiv:2502.13923; 2025.
+\bibitem{winkler2019} Winkler JK, Fink C, Toberer F, et al. Association between surgical skin markings in dermoscopic images and diagnostic performance of a deep learning convolutional neural network for melanoma recognition. JAMA Dermatology. 2019;155(10):1135--1141.
+\bibitem{winkler2021} Winkler JK, Sies K, Fink C, et al. Association between different scale bars in dermoscopic images and diagnostic performance of a market-approved deep learning convolutional neural network for melanoma recognition. European Journal of Cancer. 2021;145:146--154.
+\bibitem{bissoto2019} Bissoto A, Fornaciali M, Valle E, Avila S. (De)constructing bias on skin lesion datasets. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops; 2019.
+\bibitem{geirhos2020} Geirhos R, Jacobsen JH, Michaelis C, Zemel R, Brendel W, Bethge M, Wichmann FA. Shortcut learning in deep neural networks. Nature Machine Intelligence. 2020;2:665--673.
+\bibitem{daneshjou2022} Daneshjou R, Vodrahalli K, Novoa RA, et al. Disparities in dermatology AI performance on a diverse, curated clinical image set. Science Advances. 2022;8(31):eabq6147.
+\bibitem{kawahara2019} Kawahara J, Daneshvar S, Argenziano G, Hamarneh G. Seven-point checklist and skin lesion classification using multitask multimodal neural nets. IEEE Journal of Biomedical and Health Informatics. 2019;23(2):538--546.
+\bibitem{argenziano1998} Argenziano G, Fabbrocini G, Carli P, et al. Epiluminescence microscopy for the diagnosis of doubtful melanocytic skin lesions: comparison of the ABCD rule of dermatoscopy and a new 7-point checklist based on pattern analysis. Archives of Dermatology. 1998;134(12):1563--1570.
+\bibitem{pacheco2020} Pacheco AGC, Lima GR, Salom\~ao AS, Krohling B, et al. PAD-UFES-20: a skin lesion dataset composed of patient data and clinical images collected from smartphones. Data in Brief. 2020;32:106221.
+\bibitem{guo2017} Guo C, Pleiss G, Sun Y, Weinberger KQ. On calibration of modern neural networks. In: Proceedings of the 34th International Conference on Machine Learning. PMLR 70; 2017. p. 1321--1330.
+\end{thebibliography}
+
+\end{document}
