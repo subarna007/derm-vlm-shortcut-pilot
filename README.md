@@ -6,7 +6,28 @@ answer came from the lesion. A model could lean on the skin around it, on things
 rulers or surgical ink, or simply be confident whatever it sees. This pilot checks that cheaply,
 before a larger study.
 
-**Status: code ready, pilot not yet run.** Results will be added to `results/` once the runs are done.
+**Status: pilot complete (22 November 2026).** Paper: [`paper/Dahal_2026_derm_vlm_pilot.pdf`](paper/Dahal_2026_derm_vlm_pilot.pdf). Full results: [`results/results.md`](results/results.md).
+
+## Main findings
+
+The two models fail in opposite ways.
+
+| | MedGemma 1.5 4B | Qwen2.5-VL 3B |
+|---|---|---|
+| Balanced accuracy, Derm7pt / PAD-UFES-20 (chance 12.5%) | 28.0% / 43.4% | 20.9% / 27.7% |
+| (a) Confident diagnosis with the lesion painted out | **50.7%** of images | 2.4% |
+| (b) Diagnosis changed by background-only edits | 6–13% | **19–29%** |
+| (c) Checklist criteria vs expert labels (AUROC range) | 0.52–0.84 | 0.46–0.74 |
+| (d) Expected calibration error, token confidence | **0.35 / 0.39** | 0.23 / 0.08 |
+
+- **MedGemma reads the lesion better but does not know when there is none.** With the lesion removed it still gives a confident answer, usually "nevus", for half the images, and on all images it is about twice as confident as it is right.
+- **Qwen2.5-VL is cautious but unstable.** It almost always notices a missing lesion, but darker surrounding skin, marker lines or a ruler change a fifth to a quarter of its diagnoses, and it says "yes" to most checklist criteria for almost every image.
+- Both models call about half of all lesions melanoma, although 20% of the sample are melanomas.
+
+![Lesion removed](results/figures/lesion_removed.png)
+![Background edits](results/figures/background_flips.png)
+
+Every number comes from the per-image answers in `results/answers/` through `python -m src.analyze`.
 
 ## Models
 
@@ -63,6 +84,8 @@ python -m src.run infer --model medgemma
 python -m src.analyze                     # results/results.md, metrics.json, figures
 ```
 
+On a Kaggle T4, Qwen2.5-VL took 1 h 41 min for all images; MedGemma (4-bit, 32-bit compute) took about 7 hours, so it was run as two notebooks, one per dataset (`ONLY_DATASET=derm7pt` or `pad`).
+
 Inference appends one line per answer to `work/raw/<model>/` and skips answers already there, so an
 interrupted run continues where it stopped.
 
@@ -98,6 +121,7 @@ src/analyze.py    the four tests, bootstrap intervals, report and figures
 - Derm7pt's melanomas and nevi are sampled, not all used, and the sample is small, so the intervals
   will be wide. The pilot is meant to show whether the problems exist and whether the pipeline works,
   not to rank models.
+- In test (a), 337 of 461 images had a usable mask (139 of 256 Derm7pt, 198 of 205 PAD-UFES-20), so the Derm7pt part of tests (a) and (b) is smaller than planned.
 - Answers are read from the first token. A model that would have written "The answer is B" is still
   scored on the letter it gives most probability to.
 

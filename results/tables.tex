@@ -1,0 +1,67 @@
+\begin{table}[H]\centering\small
+\caption{Diagnosis on the original images, forced choice among 8 diagnoses (\%, 95\% bootstrap interval). Chance balanced accuracy is 12.5\%.}\label{tab:baseline}
+\begin{tabular}{lcc}\toprule
+ & MedGemma 1.5 4B & Qwen2.5-VL 3B \\\midrule
+\textit{derm7pt} ($n=256$) &  &  \\
+\quad Accuracy & 33.2 (27.3--39.1) & 27.7 (21.9--33.2) \\
+\quad Balanced accuracy & 28.0 (23.8--32.0) & 20.9 (18.2--23.9) \\
+\quad Answered ``cannot be determined'' & 9.0 & 30.5 \\
+\textit{pad} ($n=205$) &  &  \\
+\quad Accuracy & 42.4 (36.1--49.3) & 27.8 (21.5--34.1) \\
+\quad Balanced accuracy & 43.4 (38.7--48.4) & 27.7 (21.9--33.5) \\
+\quad Answered ``cannot be determined'' & 29.8 & 81.0 \\
+\bottomrule\end{tabular}\end{table}
+
+\begin{table}[H]\centering\small
+\caption{Test (a): the lesion is painted over with surrounding skin (\%). A confident diagnosis means not answering ``cannot be determined'' and giving the top diagnosis at least 50\% probability.}\label{tab:removed}
+\begin{tabular}{lcc}\toprule
+ & MedGemma 1.5 4B & Qwen2.5-VL 3B \\\midrule
+Images & 337 & 337 \\
+``Cannot be determined'', original & 18.4 (14.2--22.6) & 59.9 (54.6--65.0) \\
+``Cannot be determined'', lesion removed & 48.1 (42.7--53.1) & 96.7 (94.7--98.5) \\
+Confident diagnosis with lesion removed & 50.7 (45.7--56.1) & 2.4 (0.9--4.2) \\
+Same diagnosis as on the original & 32.6 (27.6--37.7) & 30.3 (25.5--35.6) \\
+Accuracy, original $\rightarrow$ lesion removed & 39.5 $\rightarrow$ 28.8 & 29.1 $\rightarrow$ 15.7 \\
+\bottomrule\end{tabular}\end{table}
+
+\begin{table}[H]\centering\small
+\caption{Test (b): only the skin around the lesion is changed; lesion pixels are identical (\%, 95\% bootstrap interval).}\label{tab:background}
+\begin{tabular}{lcc}\toprule
+ & MedGemma 1.5 4B & Qwen2.5-VL 3B \\\midrule
+\textit{Darker skin} &  &  \\
+\quad Diagnosis changed & 13.4 (9.8--17.2) & 29.1 (24.3--34.1) \\
+\quad Change in P(melanoma), points & +0.7 (-0.7 to +2.1) & +2.3 (+1.2 to +3.4) \\
+\textit{Skin marker} &  &  \\
+\quad Diagnosis changed & 10.1 (7.1--13.4) & 23.7 (19.3--28.2) \\
+\quad Change in P(melanoma), points & -0.1 (-1.0 to +0.8) & +0.7 (-0.2 to +1.5) \\
+\textit{Ruler} &  &  \\
+\quad Diagnosis changed & 6.2 (3.9--8.9) & 19.0 (14.8--23.1) \\
+\quad Change in P(melanoma), points & +1.9 (+1.1 to +2.8) & +1.1 (+0.4 to +1.8) \\
+\bottomrule\end{tabular}\end{table}
+
+\begin{table}[H]\centering\small
+\caption{Test (c): AUROC of the model's yes-probability for each 7-point checklist criterion against the Derm7pt expert label (95\% bootstrap interval; 0.5 is chance). Prevalence in brackets.}\label{tab:criteria}
+\begin{tabular}{lcc}\toprule
+ & MedGemma 1.5 4B & Qwen2.5-VL 3B \\\midrule
+atypical network (17\%) & 0.81 (0.74--0.86) & 0.67 (0.58--0.75) \\
+blue white veil (20\%) & 0.84 (0.79--0.89) & 0.74 (0.66--0.82) \\
+atypical vascular (5\%) & 0.62 (0.45--0.76) & 0.66 (0.52--0.80) \\
+irregular streaks (20\%) & 0.75 (0.69--0.82) & 0.59 (0.50--0.67) \\
+irregular pigmentation (33\%) & 0.77 (0.71--0.83) & 0.59 (0.51--0.66) \\
+irregular dots (46\%) & 0.62 (0.56--0.69) & 0.55 (0.48--0.63) \\
+regression (20\%) & 0.52 (0.44--0.61) & 0.46 (0.37--0.54) \\
+\bottomrule\end{tabular}\end{table}
+
+\begin{table}[H]\centering\small
+\caption{Test (d): calibration on the original images (expected calibration error, 10 bins).}\label{tab:calibration}
+\begin{tabular}{lcc}\toprule
+ & MedGemma 1.5 4B & Qwen2.5-VL 3B \\\midrule
+\textit{derm7pt} &  &  \\
+\quad Accuracy / mean token confidence & 33.2 / 68.3 & 27.7 / 51.1 \\
+\quad Token ECE & 0.35 (0.29--0.41) & 0.23 (0.18--0.29) \\
+\quad Verbal ECE (answers naming a diagnosis) & 0.61 (0.55--0.67) (242/256) & 0.53 (0.36--0.68) (36/256) \\
+\textit{pad} &  &  \\
+\quad Accuracy / mean token confidence & 42.4 / 80.6 & 27.8 / 32.7 \\
+\quad Token ECE & 0.39 (0.32--0.45) & 0.08 (0.05--0.14) \\
+\quad Verbal ECE (answers naming a diagnosis) & 0.45 (0.37--0.52) (156/205) & 0.67 (0.46--0.84) (19/205) \\
+\bottomrule\end{tabular}\end{table}

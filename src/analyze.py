@@ -307,7 +307,9 @@ def figures(all_res, out):
     import matplotlib.pyplot as plt
     out.mkdir(parents=True, exist_ok=True)
     plt.rcParams.update({"font.size": 10, "axes.spines.top": False, "axes.spines.right": False})
-    names = {k: r["model"].split("/")[-1] for k, r in all_res.items()}
+    pretty = {"google/medgemma-1.5-4b-it": "MedGemma 1.5 4B", "Qwen/Qwen2.5-VL-3B-Instruct": "Qwen2.5-VL 3B"}
+    names = {k: pretty.get(r["model"], r["model"].split("/")[-1]) for k, r in all_res.items()}
+    ds_name = {"derm7pt": "Derm7pt (dermoscopic)", "pad": "PAD-UFES-20 (smartphone)"}
     colors = ["#1F6F9E", "#C0273D", "#4A7A3A"]
 
     # reliability diagrams
@@ -320,10 +322,12 @@ def figures(all_res, out):
                 rel = r["calibration"].get(ds, {}).get("token_reliability")
                 if not rel:
                     continue
-                xs = [x[3] for x in rel if x[2] > 0]
-                ys = [x[4] for x in rel if x[2] > 0]
-                ax.plot(xs, ys, marker="o", color=col, label=names[k])
-            ax.set(xlim=(0, 1), ylim=(0, 1), xlabel="Confidence", ylabel="Accuracy", title=ds)
+                keep = [x for x in rel if x[2] >= 5]  # bins with fewer than 5 images are too noisy to draw
+                ax.plot([x[3] for x in keep], [x[4] for x in keep], color=col, lw=1.5, alpha=.8)
+                ax.scatter([x[3] for x in keep], [x[4] for x in keep], s=[12 + 2 * x[2] for x in keep],
+                           color=col, label=names[k], zorder=3)
+            ax.set(xlim=(0, 1), ylim=(0, 1), xlabel="Confidence (top answer probability)", ylabel="Accuracy",
+                   title=ds_name.get(ds, ds))
             ax.legend(frameon=False, fontsize=9)
         fig.tight_layout()
         fig.savefig(out / "reliability.png", dpi=200)
@@ -346,6 +350,24 @@ def figures(all_res, out):
     ax.legend(frameon=False)
     fig.tight_layout()
     fig.savefig(out / "background_flips.png", dpi=200)
+    plt.close(fig)
+
+    # lesion removed: abstain vs confident
+    fig, ax = plt.subplots(figsize=(6, 3.4))
+    cats = [("abstain_original", "Says cannot tell,\noriginal"), ("abstain_removed", "Says cannot tell,\nlesion removed"),
+            ("confident_removed", "Confident diagnosis,\nlesion removed")]
+    for j, ((k, r), col) in enumerate(zip(all_res.items(), colors)):
+        a = r["lesion_removed"]
+        est = np.array([a.get(c, {}).get("est", np.nan) for c, _ in cats]) * 100
+        lo = np.array([a.get(c, {}).get("lo", np.nan) for c, _ in cats]) * 100
+        hi = np.array([a.get(c, {}).get("hi", np.nan) for c, _ in cats]) * 100
+        ax.bar(np.arange(len(cats)) + j * w, est, w, color=col, label=names[k], yerr=[est - lo, hi - est], capsize=3)
+    ax.set_xticks(np.arange(len(cats)) + w * (len(all_res) - 1) / 2, [c[1] for c in cats], fontsize=9)
+    ax.set_ylabel("Share of images (%)")
+    ax.set_ylim(0, 100)
+    ax.legend(frameon=False)
+    fig.tight_layout()
+    fig.savefig(out / "lesion_removed.png", dpi=200)
     plt.close(fig)
 
     # criterion AUROC
@@ -374,7 +396,7 @@ def example_grid(work, out, dataset="pad", n=3):
     from PIL import Image
     man = pd.read_csv(Path(work) / "manifest.csv")
     ex = man[(man.dataset == dataset) & man.mask_ok].head(n)
-    if ex.empty:
+    if ex.empty or not (Path(work) / "images" / "original").exists():
         return
     titles = {"original": "Original", "lesion_removed": "Lesion removed", "bg_tone": "Darker skin",
               "bg_marker": "Skin marker", "bg_ruler": "Ruler"}
@@ -429,7 +451,8 @@ def _tci(x, pct=True):
 def latex_tables(all_res) -> str:
     """Tables for paper/paper.tex, written to results/tables.tex. One column per model."""
     keys = list(all_res)
-    names = [all_res[k]["model"].split("/")[-1].replace("_", r"\_") for k in keys]
+    pretty = {"google/medgemma-1.5-4b-it": "MedGemma 1.5 4B", "Qwen/Qwen2.5-VL-3B-Instruct": "Qwen2.5-VL 3B"}
+    names = [pretty.get(all_res[k]["model"], all_res[k]["model"].split("/")[-1]).replace("_", r"\_") for k in keys]
     head = " & ".join(names)
     cols = "l" + "c" * len(keys)
     out = []

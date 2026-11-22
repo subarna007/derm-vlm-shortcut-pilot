@@ -1,0 +1,13 @@
+dataset,label,n,mask_ok
+derm7pt,basal cell carcinoma,42,14
+derm7pt,dermatofibroma,20,4
+derm7pt,melanoma,60,36
+derm7pt,nevus,60,42
+derm7pt,seborrheic keratosis,45,25
+derm7pt,vascular lesion,29,18
+pad,actinic keratosis,35,33
+pad,basal cell carcinoma,35,35
+pad,melanoma,30,30
+pad,nevus,35,32
+pad,seborrheic keratosis,35,33
+pad,squamous cell carcinoma,35,35
